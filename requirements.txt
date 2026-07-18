@@ -5,5 +5,9 @@ python-multipart==0.0.20
 gunicorn==23.0.0
 requests==2.32.5
 tensorflow-cpu==2.15.0
+keras==2.15.0
+protobuf==4.25.9
 pandas==2.3.3
 numpy==1.26.4
+tensorboard==2.15.2
+ml-dtypes==0.2.0
