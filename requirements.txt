@@ -12,3 +12,6 @@ numpy==1.26.4
 tensorboard==2.15.2
 ml-dtypes==0.2.0
 moviepy==2.1.1
+motor==3.7.1
+proglog==0.1.12
+imageio==2.35.0
