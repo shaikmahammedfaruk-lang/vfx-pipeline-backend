@@ -229,3 +229,53 @@ button:hover {
   font-size: 0.9rem;
   border: 1px solid #38bdf8;
 }
+.asset-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); /* Auto-responsive */
+  gap: 20px;
+  padding: 20px;
+}
+
+.asset-card {
+  background: #1a1d23;
+  border-radius: 12px;
+  padding: 15px;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+  transition: transform 0.2s;
+}
+
+.asset-card:hover {
+  transform: translateY(-5px);
+}
+
+.asset-thumbnail {
+  width: 100%;
+  height: 180px;
+  object-fit: cover;
+  border-radius: 8px;
+  background: #000;
+}
+.trailer-sequence-box {
+  margin-top: 20px;
+  padding: 20px;
+  background: #1a1d23;
+  border-radius: 12px;
+  border: 1px solid #333;
+}
+
+.sequence-grid {
+  display: flex;
+  gap: 15px;
+  padding: 10px 0;
+  overflow-x: auto; /* Allows scrolling if you have many clips */
+  min-height: 80px; /* Ensures the box doesn't collapse if empty */
+}
+
+.sequence-item {
+  background: #282c34;
+  padding: 10px;
+  border-radius: 8px;
+  min-width: 150px;
+  text-align: center;
+  border: 1px solid #444;
+}
