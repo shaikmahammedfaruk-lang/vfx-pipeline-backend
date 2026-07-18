@@ -17,11 +17,13 @@ class UpdateAsset(BaseModel):
 
 app = FastAPI(title="Cinematic VFX Pipeline API")
 
-# Ensure the directory exists
-if not os.path.exists("./media"):
-    os.makedirs("./media")
+# Ensure the media directory exists
+MEDIA_DIR = "./media"
+if not os.path.exists(MEDIA_DIR):
+    os.makedirs(MEDIA_DIR)
 
-app.mount("/media", StaticFiles(directory="."), name="media")
+# Mount the media folder correctly
+app.mount("/media", StaticFiles(directory=MEDIA_DIR), name="media")
 
 app.add_middleware(
     CORSMiddleware,
@@ -35,7 +37,6 @@ client = AsyncIOMotorClient(MONGO_URL, tlsCAFile=certifi.where())
 database = client.vfx_studio_db
 assets_collection = database.get_collection("vfx_assets")
 
-# Phase 3: Mood Detection Function
 def analyze_mood(thumbnail_path):
     try:
         img = cv2.imread(thumbnail_path)
@@ -54,8 +55,9 @@ def analyze_mood(thumbnail_path):
 
 @app.post("/api/upload-asset")
 async def upload_asset(title: str, tags: str, file: UploadFile = File(...)):
-    local_storage_path = f"./{file.filename}"
-    with open(local_storage_path, "wb") as disk_file:
+    # Save file into the /media folder
+    file_path = os.path.join(MEDIA_DIR, file.filename)
+    with open(file_path, "wb") as disk_file:
         shutil.copyfileobj(file.file, disk_file)
     
     auto_tags = [tag.strip() for tag in tags.split(",")]
@@ -64,17 +66,18 @@ async def upload_asset(title: str, tags: str, file: UploadFile = File(...)):
     
     if file.content_type.startswith("video/"):
         try:
-            clip = VideoFileClip(local_storage_path)
+            clip = VideoFileClip(file_path)
             res_tag = f"{clip.size[0]}x{clip.size[1]}"
             dur_tag = f"{int(clip.duration)}s"
             auto_tags.extend([res_tag, dur_tag])
             
             thumbnail_name = f"thumb_{file.filename}.jpg"
-            clip.save_frame(f"./{thumbnail_name}", t=0.0)
+            thumb_path = os.path.join(MEDIA_DIR, thumbnail_name)
+            clip.save_frame(thumb_path, t=0.0)
             clip.close()
             
             # Perform Phase 3 Mood Analysis
-            mood_tag = analyze_mood(f"./{thumbnail_name}")
+            mood_tag = analyze_mood(thumb_path)
             auto_tags.append(mood_tag)
         except Exception as e:
             print(f"Processing error: {e}")
