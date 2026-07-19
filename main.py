@@ -42,11 +42,12 @@ database = client.vfx_studio_db
 assets_collection = database.get_collection("vfx_assets")
 sequence_collection = database.get_collection("trailer_sequences")
 
-# --- ENDPOINTS ---
+# --- SYSTEM TELEMETRY ---
 @app.get("/api/system-status")
 async def get_system_status():
     return {"mongodb": "Connected", "api": "Online"}
 
+# --- SEQUENCE PERSISTENCE ---
 @app.post("/api/sequence/save")
 async def save_sequence(data: SequenceSave):
     await sequence_collection.replace_one({"id": "main"}, {"data": data.sequence}, upsert=True)
@@ -57,7 +58,7 @@ async def get_sequence():
     doc = await sequence_collection.find_one({"id": "main"})
     return {"sequence": doc["data"] if doc else []}
 
-# --- RENDER ENGINE (Updated to accept sequence data directly) ---
+# --- RENDER ENGINE ---
 @app.post("/api/render-trailer")
 async def render_trailer(data: SequenceSave):
     sequence = data.sequence
@@ -66,6 +67,7 @@ async def render_trailer(data: SequenceSave):
 
     clips = []
     try:
+        # Load clips from local paths
         for asset in sequence:
             file_path = os.path.join(MEDIA_DIR, asset["file_name"])
             if os.path.exists(file_path):
@@ -121,5 +123,10 @@ async def delete_asset(asset_id: str):
 
 @app.put("/api/assets/{asset_id}")
 async def update_asset(asset_id: str, asset_data: UpdateAsset):
-    await assets_collection.update_one({"_id": ObjectId(asset_id)}, {"$set": {"asset_title": asset_data.title, "technical_tags": asset_data.tags.split(",")}})
+    # Split tags by comma to update as a list
+    tags_list = [t.strip() for t in asset_data.tags.split(",")]
+    await assets_collection.update_one(
+        {"_id": ObjectId(asset_id)}, 
+        {"$set": {"asset_title": asset_data.title, "technical_tags": tags_list}}
+    )
     return {"status": "Success"}

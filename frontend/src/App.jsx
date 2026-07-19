@@ -32,51 +32,47 @@ function App() {
       setSystemStatus(statusData);
     } catch (error) { 
       console.error("Initialization error:", error);
-      setMessage("Error: Could not connect to the backend.");
     }
   }
 
   useEffect(() => { fetchData() }, [])
 
-  useEffect(() => {
-    if (sequence.length > 0) {
-      fetch(`${API_BASE_URL}/api/sequence/save`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sequence })
-      }).catch(err => console.error("Auto-save failed", err));
-    }
-  }, [sequence]);
+  // --- CRUD OPERATIONS ---
+  const deleteAsset = async (id) => {
+    await fetch(`${API_BASE_URL}/api/assets/${id}`, { method: 'DELETE' });
+    fetchData();
+  };
 
-  // RENDER ENGINE TRIGGER
+  const updateAsset = async (id, newTitle, newTags) => {
+    await fetch(`${API_BASE_URL}/api/assets/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: newTitle, tags: newTags })
+    });
+    fetchData();
+  };
+
   const renderTrailer = async () => {
     if (sequence.length === 0) {
       setMessage("Sequence is empty. Add assets first!");
       return;
     }
-    setMessage("Rendering final trailer... please wait (this may take a minute).");
+    setMessage("Rendering...");
     try {
-      // Sending sequence directly in the body to match backend requirements
       const response = await fetch(`${API_BASE_URL}/api/render-trailer`, { 
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ sequence }) 
       });
       const data = await response.json();
-      
-      if(data.status === 'Success') {
-        setMessage(`Render Complete! View: ${API_BASE_URL}${data.url}`);
-      } else {
-        setMessage(`Render failed: ${data.message || 'Unknown server error'}`);
-      }
-    } catch (err) { 
-      setMessage("Render failed: Server connection lost."); 
-    }
+      if(data.status === 'Success') setMessage(`Render Complete! View: ${API_BASE_URL}${data.url}`);
+      else setMessage(`Render failed: ${data.message}`);
+    } catch (err) { setMessage("Render failed."); }
   };
 
+  // --- UI HELPERS ---
   const uniqueTags = [...new Set(vaultAssets.flatMap(a => a.technical_tags || []))];
   const toggleFilter = (tag) => setActiveFilters(prev => prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]);
-
   const addToSequence = (asset) => setSequence([...sequence, asset]);
   const removeFromSequence = (index) => setSequence(sequence.filter((_, i) => i !== index));
   const moveInSequence = (index, direction) => {
@@ -98,7 +94,7 @@ function App() {
         method: 'POST', body: formData
       });
       setTitle(''); setTags(''); setFile(null); fetchData();
-      setMessage("Asset uploaded successfully!");
+      setMessage("Asset uploaded!");
     } catch (error) { setMessage('Upload failed.') } finally { setLoading(false) }
   }
 
@@ -118,31 +114,22 @@ function App() {
         <h1>VFX PIPELINE</h1>
         <form onSubmit={handleUpload} className="upload-form">
           <input type="text" placeholder="Title" value={title} onChange={(e) => setTitle(e.target.value)} required />
-          <input type="text" placeholder="Tags (comma separated)" value={tags} onChange={(e) => setTags(e.target.value)} required />
+          <input type="text" placeholder="Tags" value={tags} onChange={(e) => setTags(e.target.value)} required />
           <input type="file" onChange={(e) => setFile(e.target.files[0])} required />
           <button type="submit" disabled={loading}>{loading ? "Processing..." : "Process & Upload"}</button>
         </form>
         {message && <div className="status-box">{message}</div>}
       </div>
 
-      <div className="header">
-        <h3>Welcome back, VFX Lead. Project Echoes of Eternity is active.</h3>
-      </div>
-
       <div className="vault-section">
         <h2>ASSET VAULT OVERVIEW</h2>
-        <input type="text" placeholder="🔍 Search assets..." className="search-bar" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
-        <div className="filter-bar" style={{ marginBottom: '15px' }}>
-          {uniqueTags.map(tag => (
-            <button key={tag} className={activeFilters.includes(tag) ? 'filter-btn active' : 'filter-btn'} onClick={() => toggleFilter(tag)}>{tag}</button>
-          ))}
-        </div>
         <div className="asset-grid">
           {filteredAssets.map((asset) => (
             <div key={asset._id} className="asset-card">
               {isVideo(asset.file_name) ? <video src={`${API_BASE_URL}/media/${asset.file_name}`} controls className="asset-thumbnail" /> : <img src={`${API_BASE_URL}/media/${asset.file_name}`} className="asset-thumbnail" />}
               <div className="asset-title">{asset.asset_title}</div>
-              <button onClick={() => addToSequence(asset)}>+ Add to Trailer</button>
+              <button onClick={() => addToSequence(asset)}>+ Add</button>
+              <button onClick={() => deleteAsset(asset._id)} style={{ background: '#ef4444' }}>Delete</button>
             </div>
           ))}
         </div>
@@ -150,27 +137,15 @@ function App() {
 
       <div className="status-panel">
         <h3>SYSTEM STATUS</h3>
-        <div style={{ background: '#0f1115', padding: '10px', borderRadius: '5px', marginBottom: '20px' }}>
-          <p>🚀 FastAPI: <span style={{ color: '#34d399' }}>{systemStatus.api}</span></p>
-          <p>🗄️ MongoDB: <span style={{ color: '#34d399' }}>{systemStatus.mongodb}</span></p>
-        </div>
-
-        <div className="trailer-sequence-box">
-          <h4>🎬 Trailer Sequence</h4>
-          <button onClick={renderTrailer} style={{ width: '100%', background: '#059669', padding: '10px', cursor: 'pointer', border: 'none', color: 'white', borderRadius: '5px', marginBottom: '10px' }}>🚀 Render Final Trailer</button>
-          <div className="sequence-grid">
-            {sequence.map((asset, index) => (
-              <div key={index} className="sequence-item">
-                <img src={`${API_BASE_URL}/media/${asset.thumbnail_file}`} style={{ width: '100%', height: '60px', objectFit: 'cover' }} />
-                <p style={{ fontSize: '0.75rem' }}>{asset.asset_title}</p>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '5px' }}>
-                  <button onClick={() => moveInSequence(index, -1)} disabled={index === 0}>←</button>
-                  <button onClick={() => removeFromSequence(index)}>X</button>
-                  <button onClick={() => moveInSequence(index, 1)} disabled={index === sequence.length - 1}>→</button>
-                </div>
-              </div>
-            ))}
-          </div>
+        <p>🚀 FastAPI: {systemStatus.api} | 🗄️ MongoDB: {systemStatus.mongodb}</p>
+        <button onClick={renderTrailer}>🚀 Render Final Trailer</button>
+        <div className="sequence-grid">
+          {sequence.map((asset, index) => (
+            <div key={index} className="sequence-item">
+              <img src={`${API_BASE_URL}/media/${asset.thumbnail_file}`} />
+              <button onClick={() => removeFromSequence(index)}>X</button>
+            </div>
+          ))}
         </div>
       </div>
     </div>
