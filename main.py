@@ -9,7 +9,11 @@ from bson import ObjectId
 from pydantic import BaseModel
 from worker import render_trailer_task, celery
 from celery.result import AsyncResult
-from datetime import datetime, timedelta # Added for Phase 5
+from datetime import datetime, timedelta
+from openai import OpenAI # Added OpenAI import
+
+# --- OPENAI SETUP ---
+client_openai = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 # --- CLOUDINARY SETUP ---
 cloudinary.config(
@@ -25,6 +29,7 @@ class UpdateAsset(BaseModel):
 
 class SequenceSave(BaseModel):
     sequence: list
+    audio_url: str = None  # Added audio_url field
 
 # --- APP SETUP ---
 app = FastAPI(title="Cinematic VFX Pipeline API")
@@ -43,13 +48,33 @@ assets_collection = database.get_collection("vfx_assets")
 sequence_collection = database.get_collection("trailer_sequences")
 
 # --- ENDPOINTS ---
+
+@app.post("/api/generate-voiceover")
+async def generate_voiceover(text: str = Form(...)):
+    """Generates an MP3 file from text using OpenAI TTS and uploads to Cloudinary."""
+    # Generate speech
+    response = client_openai.audio.speech.create(
+        model="tts-1",
+        voice="onyx",
+        input=text
+    )
+    
+    # Save temporarily
+    filename = f"vo_{ObjectId()}.mp3"
+    response.stream_to_file(filename)
+    
+    # Upload to Cloudinary
+    upload_result = cloudinary.uploader.upload(filename, resource_type="video")
+    os.remove(filename) # Cleanup local file
+    
+    return {"audio_url": upload_result.get("secure_url")}
+
 @app.get("/api/system-status")
 async def get_system_status():
     return {"mongodb": "Connected", "api": "Online"}
 
 @app.post("/api/sequence/save")
 async def save_sequence(data: SequenceSave):
-    # Added created_at timestamp for Phase 5 cleanup functionality
     await sequence_collection.replace_one(
         {"id": "main"}, 
         {"data": data.sequence, "created_at": datetime.utcnow()}, 
@@ -57,10 +82,8 @@ async def save_sequence(data: SequenceSave):
     )
     return {"message": "Sequence saved successfully"}
 
-# --- PHASE 5: CLEANUP ENDPOINT ---
 @app.delete("/api/cleanup-old-sequences")
 async def cleanup_sequences():
-    # Deletes sequences older than 24 hours
     limit = datetime.utcnow() - timedelta(hours=24)
     result = await sequence_collection.delete_many({"created_at": {"$lt": limit}})
     return {"status": "Success", "deleted_count": result.deleted_count}
@@ -74,7 +97,9 @@ async def get_sequence():
 async def render_trailer(data: SequenceSave):
     if not data.sequence:
         return {"status": "Error", "message": "Sequence is empty"}
-    task = render_trailer_task.delay(data.sequence)
+    
+    # Passing sequence and audio_url to the worker
+    task = render_trailer_task.delay(data.sequence, audio_url=data.audio_url)
     return {"status": "Accepted", "task_id": task.id}
 
 @app.get("/api/render-status/{task_id}")

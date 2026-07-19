@@ -8,6 +8,8 @@ function App() {
   const [tags, setTags] = useState('')
   const [lensType, setLensType] = useState('')
   const [frameRate, setFrameRate] = useState('')
+  const [audioUrl, setAudioUrl] = useState('')
+  const [voScript, setVoScript] = useState('') // New state for VO script
   const [file, setFile] = useState(null)
   const [message, setMessage] = useState('')
   const [vaultAssets, setVaultAssets] = useState([])
@@ -15,7 +17,7 @@ function App() {
   const [sequence, setSequence] = useState([])
   const [systemStatus, setSystemStatus] = useState({ mongodb: 'Checking...', api: 'Checking...' })
   const [finalTrailerUrl, setFinalTrailerUrl] = useState('')
-  const [renderProgress, setRenderProgress] = useState(0) // Added for progress bar
+  const [renderProgress, setRenderProgress] = useState(0)
 
   const fetchData = async () => {
     try {
@@ -39,6 +41,26 @@ function App() {
 
   useEffect(() => { fetchData() }, [])
 
+  // --- NEW: VOICE-OVER GENERATION ---
+  const generateVoiceOver = async () => {
+    if (!voScript) { setMessage("Please enter a script first!"); return; }
+    setMessage("Generating Voice-Over...");
+    try {
+      const formData = new FormData();
+      formData.append('text', voScript);
+      
+      const res = await fetch(`${API_BASE_URL}/api/generate-voiceover`, {
+        method: 'POST',
+        body: formData
+      });
+      const data = await res.json();
+      setAudioUrl(data.audio_url);
+      setMessage("Voice-Over Ready!");
+    } catch (err) {
+      setMessage("Voice-Over generation failed.");
+    }
+  };
+
   const deleteAsset = async (id) => {
     await fetch(`${API_BASE_URL}/api/assets/${id}`, { method: 'DELETE' });
     fetchData();
@@ -50,28 +72,26 @@ function App() {
       return;
     }
     
-    setMessage("Render started in background...");
+    setMessage("Render started...");
     setFinalTrailerUrl('');
-    setRenderProgress(0); // Reset progress
+    setRenderProgress(0);
     
     try {
       const response = await fetch(`${API_BASE_URL}/api/render-trailer`, { 
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sequence }) 
+        body: JSON.stringify({ sequence, audio_url: audioUrl }) 
       });
       const data = await response.json();
       
       if (data.status === 'Accepted') {
         const taskId = data.task_id;
-        
-        // Poll for status and progress
         const interval = setInterval(async () => {
           const statusRes = await fetch(`${API_BASE_URL}/api/render-status/${taskId}`);
           const statusData = await statusRes.json();
           
           if (statusData.status === 'PROGRESS') {
-            setRenderProgress(statusData.progress); // Update progress state
+            setRenderProgress(statusData.progress);
             setMessage(`Rendering: ${statusData.progress}%`);
           } else if (statusData.status === 'SUCCESS') {
             clearInterval(interval);
@@ -97,7 +117,7 @@ function App() {
   const handleUpload = async (e) => {
     e.preventDefault()
     if (!file) return;
-    setLoading(true); setMessage("Uploading to Cloud...");
+    setLoading(true); setMessage("Uploading...");
     
     const formData = new FormData(); 
     formData.append('file', file);
@@ -112,7 +132,7 @@ function App() {
         body: formData
       });
       setTitle(''); setTags(''); setLensType(''); setFrameRate(''); setFile(null); fetchData();
-      setMessage("Asset uploaded with metadata!");
+      setMessage("Asset uploaded!");
     } catch (error) { setMessage('Upload failed.') } finally { setLoading(false) }
   }
 
@@ -123,16 +143,39 @@ function App() {
         <form onSubmit={handleUpload} className="upload-form">
           <input type="text" placeholder="Title" value={title} onChange={(e) => setTitle(e.target.value)} required />
           <input type="text" placeholder="Tags" value={tags} onChange={(e) => setTags(e.target.value)} required />
-          <input type="text" placeholder="Lens Type (e.g., 50mm)" value={lensType} onChange={(e) => setLensType(e.target.value)} required />
-          <input type="text" placeholder="Frame Rate (e.g., 30fps)" value={frameRate} onChange={(e) => setFrameRate(e.target.value)} required />
+          <input type="text" placeholder="Lens Type" value={lensType} onChange={(e) => setLensType(e.target.value)} required />
+          <input type="text" placeholder="Frame Rate" value={frameRate} onChange={(e) => setFrameRate(e.target.value)} required />
           <input type="file" onChange={(e) => setFile(e.target.files[0])} required />
           <button type="submit" disabled={loading}>{loading ? "Processing..." : "Process & Upload"}</button>
         </form>
+        
+        {/* Audio URL Input */}
+        <input 
+            type="text" 
+            placeholder="Audio URL (Background Music)" 
+            value={audioUrl} 
+            onChange={(e) => setAudioUrl(e.target.value)} 
+            style={{ marginTop: '20px', width: '100%' }}
+        />
+
+        {/* Voice-Over Generation Section */}
+        <div className="voiceover-section" style={{ marginTop: '20px' }}>
+          <textarea 
+            placeholder="Enter Voice-Over Script..." 
+            value={voScript}
+            onChange={(e) => setVoScript(e.target.value)} 
+            style={{ width: '100%', height: '80px' }}
+          />
+          <button onClick={generateVoiceOver} style={{ marginTop: '10px', width: '100%' }}>
+            Generate Voice-Over
+          </button>
+        </div>
+        
         {message && <div className="status-box">{message}</div>}
       </div>
 
       <div className="vault-section">
-        <h2>ASSET VAULT OVERVIEW</h2>
+        <h2>ASSET VAULT</h2>
         <div className="asset-grid">
           {vaultAssets.map((asset) => (
             <div key={asset._id} className="asset-card">
@@ -150,7 +193,6 @@ function App() {
         <p>🚀 FastAPI: {systemStatus.api} | 🗄️ MongoDB: {systemStatus.mongodb}</p>
         <button onClick={renderTrailer}>🚀 Render Final Trailer</button>
         
-        {/* Render Progress Bar */}
         {renderProgress > 0 && renderProgress < 100 && (
             <div className="progress-container" style={{ width: '100%', background: '#ccc', margin: '10px 0' }}>
                 <div style={{ width: `${renderProgress}%`, background: '#4caf50', height: '20px' }}></div>

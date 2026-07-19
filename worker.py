@@ -3,7 +3,7 @@ import time
 import requests
 from dotenv import load_dotenv
 from celery import Celery
-from moviepy import VideoFileClip, concatenate_videoclips, TextClip, CompositeVideoClip
+from moviepy import VideoFileClip, concatenate_videoclips, TextClip, CompositeVideoClip, AudioFileClip
 import cloudinary
 import cloudinary.uploader
 from bson import ObjectId
@@ -26,7 +26,7 @@ TEMP_DIR = "temp_files"
 if not os.path.exists(TEMP_DIR): os.makedirs(TEMP_DIR)
 
 @celery.task(name="render_trailer_task", bind=True)
-def render_trailer_task(self, sequence):
+def render_trailer_task(self, sequence, audio_url=None):
     clips = []
     temp_files = []
     unique_id = f"{ObjectId()}_{int(time.time())}"
@@ -42,7 +42,7 @@ def render_trailer_task(self, sequence):
             
             clip = VideoFileClip(temp_path)
             
-            # --- PHASE 4: STABLE VFX APPLICATION ---
+            # --- VFX APPLICATION ---
             try:
                 from moviepy.video.fx import colorx
                 clip = colorx(clip, 1.2)
@@ -57,8 +57,21 @@ def render_trailer_task(self, sequence):
         
         final_clip = concatenate_videoclips(clips, method="compose", padding=-fade_duration)
         
-        # --- PHASE 4: ADD CINEMATIC WATERMARK (FONT ARGUMENT REMOVED) ---
-        # Omitting the 'font' argument forces the use of internal defaults
+        # --- AUDIO INTEGRATION ---
+        if audio_url:
+            audio_path = os.path.join(TEMP_DIR, f"audio_{unique_id}.mp3")
+            audio_response = requests.get(audio_url)
+            with open(audio_path, "wb") as f: f.write(audio_response.content)
+            temp_files.append(audio_path)
+            
+            background_audio = AudioFileClip(audio_path)
+            # Ensure audio length matches video
+            if background_audio.duration > final_clip.duration:
+                background_audio = background_audio.subclipped(0, final_clip.duration)
+            
+            final_clip = final_clip.with_audio(background_audio)
+        
+        # --- WATERMARK ---
         watermark = TextClip(
             text="ECHOES OF ETERNITY", 
             font_size=50, 
@@ -70,7 +83,7 @@ def render_trailer_task(self, sequence):
         final_clip = CompositeVideoClip([final_clip, watermark])
         final_clip.write_videofile(output_path, codec="libx264", audio_codec="aac")
         
-        # Cleanup clips in memory
+        # Cleanup
         final_clip.close()
         for clip in clips: clip.close()
             
@@ -81,7 +94,6 @@ def render_trailer_task(self, sequence):
         return {"status": "Error", "message": str(e)}
         
     finally:
-        # Robust Cleanup Logic
         for clip in clips:
             try: clip.close()
             except: pass
