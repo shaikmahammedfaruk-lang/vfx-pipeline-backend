@@ -3,7 +3,7 @@ import time
 import requests
 from dotenv import load_dotenv
 from celery import Celery
-from moviepy import VideoFileClip, concatenate_videoclips, vfx, TextClip, CompositeVideoClip
+from moviepy import VideoFileClip, concatenate_videoclips, TextClip, CompositeVideoClip, vfx
 import cloudinary
 import cloudinary.uploader
 from bson import ObjectId
@@ -54,8 +54,8 @@ def render_trailer_task(self, sequence):
             clip = VideoFileClip(temp_path)
             
             # --- PHASE 4: APPLY CINEMATIC VFX ---
-            # Using with_effects is the compatible way for moviepy v2.0+
-            clip = clip.with_effects([vfx.multiply_color(1.2)])
+            # Using vfx.colorx directly from the vfx module
+            clip = vfx.colorx(clip, 1.2)
             
             # Apply fadein safely
             if hasattr(clip, "fadein"):
@@ -72,7 +72,7 @@ def render_trailer_task(self, sequence):
         final_clip = concatenate_videoclips(clips, method="compose", padding=-fade_duration)
         
         # --- PHASE 4: ADD CINEMATIC WATERMARK ---
-        # Note: Ensure ImageMagick is installed and linked in your environment
+        # Note: Ensure ImageMagick is installed and configured in your environment
         watermark = TextClip(
             "ECHOES OF ETERNITY", 
             font_size=50, 
