@@ -53,9 +53,9 @@ def render_trailer_task(self, sequence):
             # Process with moviepy
             clip = VideoFileClip(temp_path)
             
-            # --- PHASE 4: APPLY CINEMATIC VFX (FIXED) ---
-            # Correct functional syntax for newer moviepy versions
-            clip = vfx.colorx(clip, 1.2)
+            # --- PHASE 4: APPLY CINEMATIC VFX ---
+            # Using with_effects is the compatible way for moviepy v2.0+
+            clip = clip.with_effects([vfx.multiply_color(1.2)])
             
             # Apply fadein safely
             if hasattr(clip, "fadein"):
@@ -72,14 +72,15 @@ def render_trailer_task(self, sequence):
         final_clip = concatenate_videoclips(clips, method="compose", padding=-fade_duration)
         
         # --- PHASE 4: ADD CINEMATIC WATERMARK ---
+        # Note: Ensure ImageMagick is installed and linked in your environment
         watermark = TextClip(
             "ECHOES OF ETERNITY", 
-            fontsize=50, 
+            font_size=50, 
             color='white', 
             font='Arial',
             method='caption',
             size=(final_clip.w, None)
-        ).set_duration(final_clip.duration).set_position(("center", "bottom"))
+        ).with_duration(final_clip.duration).with_position(("center", "bottom"))
         
         final_clip = CompositeVideoClip([final_clip, watermark])
         
