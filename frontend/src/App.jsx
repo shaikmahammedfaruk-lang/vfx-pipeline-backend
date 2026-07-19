@@ -15,6 +15,7 @@ function App() {
   const [sequence, setSequence] = useState([])
   const [systemStatus, setSystemStatus] = useState({ mongodb: 'Checking...', api: 'Checking...' })
   const [finalTrailerUrl, setFinalTrailerUrl] = useState('')
+  const [renderProgress, setRenderProgress] = useState(0) // Added for progress bar
 
   const fetchData = async () => {
     try {
@@ -43,15 +44,15 @@ function App() {
     fetchData();
   };
 
-  // --- UPDATED POLLING RENDER FUNCTION ---
   const renderTrailer = async () => {
     if (sequence.length === 0) {
       setMessage("Sequence is empty. Add assets first!");
       return;
     }
     
-    setMessage("Render started in background... please wait.");
+    setMessage("Render started in background...");
     setFinalTrailerUrl('');
+    setRenderProgress(0); // Reset progress
     
     try {
       const response = await fetch(`${API_BASE_URL}/api/render-trailer`, { 
@@ -64,20 +65,24 @@ function App() {
       if (data.status === 'Accepted') {
         const taskId = data.task_id;
         
-        // Poll for status
+        // Poll for status and progress
         const interval = setInterval(async () => {
           const statusRes = await fetch(`${API_BASE_URL}/api/render-status/${taskId}`);
           const statusData = await statusRes.json();
           
-          if (statusData.status === 'SUCCESS') {
+          if (statusData.status === 'PROGRESS') {
+            setRenderProgress(statusData.progress); // Update progress state
+            setMessage(`Rendering: ${statusData.progress}%`);
+          } else if (statusData.status === 'SUCCESS') {
             clearInterval(interval);
+            setRenderProgress(100);
             setMessage("Render Complete!");
             setFinalTrailerUrl(statusData.result.url);
           } else if (statusData.status === 'FAILURE') {
             clearInterval(interval);
-            setMessage("Render Failed. Please check the backend logs.");
+            setMessage("Render Failed.");
           }
-        }, 3000);
+        }, 2000);
       } else {
         setMessage(`Error: ${data.message}`);
       }
@@ -113,7 +118,6 @@ function App() {
 
   return (
     <div className="dashboard-layout">
-      {/* ... (Keep your existing JSX return structure as it is) ... */}
       <div className="sidebar">
         <h1>VFX PIPELINE</h1>
         <form onSubmit={handleUpload} className="upload-form">
@@ -134,9 +138,6 @@ function App() {
             <div key={asset._id} className="asset-card">
               <video src={asset.file_url} controls className="asset-thumbnail" />
               <div className="asset-title">{asset.asset_title}</div>
-              <div className="asset-metadata">
-                <small>Lens: {asset.metadata?.lens} | FPS: {asset.metadata?.fps}</small>
-              </div>
               <button onClick={() => addToSequence(asset)}>+ Add</button>
               <button onClick={() => deleteAsset(asset._id)} style={{ background: '#ef4444' }}>Delete</button>
             </div>
@@ -148,6 +149,13 @@ function App() {
         <h3>SYSTEM STATUS</h3>
         <p>🚀 FastAPI: {systemStatus.api} | 🗄️ MongoDB: {systemStatus.mongodb}</p>
         <button onClick={renderTrailer}>🚀 Render Final Trailer</button>
+        
+        {/* Render Progress Bar */}
+        {renderProgress > 0 && renderProgress < 100 && (
+            <div className="progress-container" style={{ width: '100%', background: '#ccc', margin: '10px 0' }}>
+                <div style={{ width: `${renderProgress}%`, background: '#4caf50', height: '20px' }}></div>
+            </div>
+        )}
         
         {finalTrailerUrl && (
           <div className="final-output">
