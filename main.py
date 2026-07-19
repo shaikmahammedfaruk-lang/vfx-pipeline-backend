@@ -84,7 +84,9 @@ async def get_sequence():
 async def render_trailer(data: SequenceSave):
     if not data.sequence:
         return {"status": "Error", "message": "Sequence is empty"}
-    task = render_trailer_task.delay(data.sequence, audio_url=data.audio_url)
+    
+    # Use the explicit task name to send the task
+    task = celery_app.send_task("render_trailer_task", args=[data.sequence], kwargs={"audio_url": data.audio_url})
     return {"status": "Accepted", "task_id": task.id}
 
 @app.get("/api/render-status/{task_id}")
