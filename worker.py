@@ -15,9 +15,6 @@ cloudinary.config(
 )
 
 # --- CELERY SETUP ---
-# Use the 'rediss://' scheme for secure SSL connections to Upstash
-# Use the full TCP URL you copied from the TCP tab
-# Update the REDIS_URL line in worker.py to look exactly like this:
 REDIS_URL = "rediss://default:gQAAAAAAAohWAAIgcDE2MDIxMzc3ZmI3YzQ0NDAzOGIzN2MxMzkyOTM0ZDc1OQ@sunny-snail-165974.upstash.io:6379?ssl_cert_reqs=CERT_NONE"
 
 celery = Celery(
@@ -26,19 +23,24 @@ celery = Celery(
     backend=REDIS_URL
 )
 
+# Ensure local temp directory exists
+TEMP_DIR = "temp_files"
+if not os.path.exists(TEMP_DIR):
+    os.makedirs(TEMP_DIR)
+
 @celery.task(name="render_trailer_task")
 def render_trailer_task(sequence):
     clips = []
     temp_files = []
-    # Create a unique output path
-    output_path = f"/tmp/final_{ObjectId()}.mp4"
+    # Create a unique output path using the local directory
+    output_path = os.path.join(TEMP_DIR, f"final_{ObjectId()}.mp4")
     fade_duration = 0.5
     
     try:
         for asset in sequence:
             # Download file
             response = requests.get(asset["file_url"])
-            temp_path = f"/tmp/{ObjectId()}.mp4"
+            temp_path = os.path.join(TEMP_DIR, f"{ObjectId()}.mp4")
             with open(temp_path, "wb") as f:
                 f.write(response.content)
             
