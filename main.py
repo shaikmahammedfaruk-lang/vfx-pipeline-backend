@@ -1,4 +1,5 @@
 import os
+import certifi
 import cloudinary
 import cloudinary.uploader
 from fastapi import FastAPI, UploadFile, File, Form
@@ -6,9 +7,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 from bson import ObjectId
 from pydantic import BaseModel
-from worker import render_trailer_task  # Import the background task
+from worker import render_trailer_task
 from celery.result import AsyncResult
-import certifi
 
 # --- CLOUDINARY SETUP ---
 cloudinary.config(
@@ -27,10 +27,16 @@ class SequenceSave(BaseModel):
 
 # --- APP SETUP ---
 app = FastAPI(title="Cinematic VFX Pipeline API")
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+app.add_middleware(
+    CORSMiddleware, 
+    allow_origins=["*"], 
+    allow_methods=["*"], 
+    allow_headers=["*"]
+)
 
 # --- DATABASE ---
-MONGO_URL = "mongodb+srv://shaikmahammedfaruk_db_user:faruk%40123@cluster0.18nb4p7.mongodb.net/?retryWrites=true&w=majority"
+# It is highly recommended to store the MONGO_URL in an environment variable
+MONGO_URL = os.getenv("MONGO_URL", "mongodb+srv://shaikmahammedfaruk_db_user:faruk%40123@cluster0.18nb4p7.mongodb.net/?retryWrites=true&w=majority")
 client = AsyncIOMotorClient(MONGO_URL, tlsCAFile=certifi.where()) 
 database = client.vfx_studio_db
 assets_collection = database.get_collection("vfx_assets")
@@ -62,7 +68,11 @@ async def render_trailer(data: SequenceSave):
 @app.get("/api/render-status/{task_id}")
 async def get_render_status(task_id: str):
     task_result = AsyncResult(task_id)
-    return {"status": task_result.status, "result": task_result.result}
+    # Return status and result
+    return {
+        "status": task_result.status, 
+        "result": task_result.result if task_result.ready() else None
+    }
 
 @app.post("/api/upload-asset")
 async def upload_asset(
