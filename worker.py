@@ -2,7 +2,7 @@ import os
 import requests
 from celery import Celery
 from moviepy import VideoFileClip, concatenate_videoclips
-from moviepy.video.fx import fadein
+import moviepy.video.fx as fx
 import cloudinary
 import cloudinary.uploader
 from bson import ObjectId
@@ -43,9 +43,11 @@ def render_trailer_task(sequence):
             with open(temp_path, "wb") as f:
                 f.write(response.content)
             
-            # Process with moviepy using the functional fadein approach
+            # Process with moviepy using the generic fx() method
             clip = VideoFileClip(temp_path)
-            clip = fadein(clip, duration=fade_duration)
+            # This applies FadeIn safely using the fx module
+            clip = clip.fx(fx.FadeIn, duration=fade_duration)
+            
             clips.append(clip)
             temp_files.append(temp_path)
         
