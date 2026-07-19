@@ -45,16 +45,18 @@ def render_trailer_task(self, sequence, audio_url=None):
             # --- VFX APPLICATION ---
             try:
                 from moviepy.video.fx import colorx
-                clip = colorx(clip, 1.2)
+                clip = clip.with_effects([colorx(1.2)])
             except: pass
             
-            if hasattr(clip, "fadein"): clip = clip.fadein(fade_duration)
+            # Fade in transition
+            clip = clip.with_effects([lambda c: c.fadein(fade_duration)])
             clips.append(clip)
             temp_files.append(temp_path)
             
             progress = int(((i + 1) / total_assets) * 100)
             self.update_state(state='PROGRESS', meta={'percent': progress})
         
+        # Concatenate with cross-fade effect
         final_clip = concatenate_videoclips(clips, method="compose", padding=-fade_duration)
         
         # --- AUDIO INTEGRATION ---
@@ -65,7 +67,8 @@ def render_trailer_task(self, sequence, audio_url=None):
             temp_files.append(audio_path)
             
             background_audio = AudioFileClip(audio_path)
-            # Ensure audio length matches video
+            
+            # Logic: If audio is longer, trim to video duration; if shorter, video will end at audio end
             if background_audio.duration > final_clip.duration:
                 background_audio = background_audio.subclipped(0, final_clip.duration)
             
