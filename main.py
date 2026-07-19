@@ -69,9 +69,10 @@ async def render_trailer(data: SequenceSave):
         for asset in sequence:
             # Download from Cloudinary URL to temporary /tmp folder
             response = requests.get(asset["file_url"])
-            temp_path = f"/tmp/{asset['asset_title']}.mp4"
+            temp_path = f"/tmp/{ObjectId()}.mp4"
             with open(temp_path, "wb") as f:
                 f.write(response.content)
+            
             clips.append(VideoFileClip(temp_path))
             temp_files.append(temp_path)
         
@@ -82,9 +83,15 @@ async def render_trailer(data: SequenceSave):
         final_clip.close()
         for clip in clips: clip.close()
         
-        # In a production app, you would upload this final file back to Cloudinary
-        return {"status": "Success", "message": "Rendered to temporary server storage"}
+        # Cleanup temporary files
+        for f in temp_files:
+            if os.path.exists(f): os.remove(f)
+            
+        return {"status": "Success", "message": "Render completed successfully"}
     except Exception as e:
+        # Cleanup on error
+        for f in temp_files:
+            if os.path.exists(f): os.remove(f)
         return {"status": "Error", "message": str(e)}
 
 @app.post("/api/upload-asset")
