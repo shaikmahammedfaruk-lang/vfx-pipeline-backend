@@ -53,9 +53,9 @@ def render_trailer_task(self, sequence):
             # Process with moviepy
             clip = VideoFileClip(temp_path)
             
-            # --- PHASE 4: APPLY CINEMATIC VFX ---
-            # Boost contrast/color intensity
-            clip = clip.fx(vfx.colorx, 1.2)
+            # --- PHASE 4: APPLY CINEMATIC VFX (FIXED) ---
+            # Correct functional syntax for newer moviepy versions
+            clip = vfx.colorx(clip, 1.2)
             
             # Apply fadein safely
             if hasattr(clip, "fadein"):
