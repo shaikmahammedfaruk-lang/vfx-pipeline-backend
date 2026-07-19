@@ -15,7 +15,6 @@ function App() {
   const [sequence, setSequence] = useState([])
   const [systemStatus, setSystemStatus] = useState({ mongodb: 'Checking...', api: 'Checking...' })
 
-  // Improved Fetching with Logging
   const fetchData = async () => {
     try {
       const [assetRes, seqRes, statusRes] = await Promise.all([
@@ -39,7 +38,6 @@ function App() {
 
   useEffect(() => { fetchData() }, [])
 
-  // Auto-save sequence with better error handling
   useEffect(() => {
     if (sequence.length > 0) {
       fetch(`${API_BASE_URL}/api/sequence/save`, {
@@ -50,6 +48,7 @@ function App() {
     }
   }, [sequence]);
 
+  // RENDER ENGINE TRIGGER
   const renderTrailer = async () => {
     if (sequence.length === 0) {
       setMessage("Sequence is empty. Add assets first!");
@@ -57,7 +56,12 @@ function App() {
     }
     setMessage("Rendering final trailer... please wait (this may take a minute).");
     try {
-      const response = await fetch(`${API_BASE_URL}/api/render-trailer`, { method: 'POST' });
+      // Sending sequence directly in the body to match backend requirements
+      const response = await fetch(`${API_BASE_URL}/api/render-trailer`, { 
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sequence }) 
+      });
       const data = await response.json();
       
       if(data.status === 'Success') {
