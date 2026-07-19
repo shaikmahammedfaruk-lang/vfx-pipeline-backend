@@ -46,8 +46,7 @@ def render_trailer_task(self, sequence):
             try:
                 from moviepy.video.fx import colorx
                 clip = colorx(clip, 1.2)
-            except:
-                pass
+            except: pass
             
             if hasattr(clip, "fadein"): clip = clip.fadein(fade_duration)
             clips.append(clip)
@@ -58,10 +57,10 @@ def render_trailer_task(self, sequence):
         
         final_clip = concatenate_videoclips(clips, method="compose", padding=-fade_duration)
         
-        # --- PHASE 4: ADD CINEMATIC WATERMARK (FIXED FONT) ---
+        # --- PHASE 4: ADD CINEMATIC WATERMARK (FONT ARGUMENT REMOVED) ---
+        # Omitting the 'font' argument forces the use of internal defaults
         watermark = TextClip(
             text="ECHOES OF ETERNITY", 
-            font="sans-serif", # Changed from "Arial" to generic fallback
             font_size=50, 
             color="white", 
             method="caption", 
