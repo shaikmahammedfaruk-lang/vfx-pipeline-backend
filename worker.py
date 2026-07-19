@@ -27,7 +27,7 @@ TEMP_DIR = "temp_files"
 if not os.path.exists(TEMP_DIR): os.makedirs(TEMP_DIR)
 
 # Change this in worker.py:
-@celery_app.task(name="render_trailer_task", bind=True)
+@celery_app.task(name="render_trailer_task")
 def render_trailer_task(self, sequence, audio_url=None):
     # ... rest of your code ...
     clips = []
@@ -76,10 +76,12 @@ def render_trailer_task(self, sequence, audio_url=None):
             final_clip = final_clip.with_audio(background_audio)
         
         # WATERMARK (Using explicit duration and size for stability)
+   # --- WATERMARK ---
+        # Using a fixed size and ensuring we don't pass complex objects
         watermark = TextClip(
             text="ECHOES OF ETERNITY", 
             font_size=50, 
-            color="white", 
+            color="white",
             size=(final_clip.w, 100)
         ).with_duration(final_clip.duration).with_position(("center", "bottom"))
         
