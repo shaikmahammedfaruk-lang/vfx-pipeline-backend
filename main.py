@@ -1,13 +1,13 @@
 import os
-import requests
 import cloudinary
 import cloudinary.uploader
-from moviepy import VideoFileClip, concatenate_videoclips
-from fastapi import FastAPI, UploadFile, File
+from fastapi import FastAPI, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 from bson import ObjectId
 from pydantic import BaseModel
+from worker import render_trailer_task  # Import the background task
+from celery.result import AsyncResult
 import certifi
 
 # --- CLOUDINARY SETUP ---
@@ -27,13 +27,7 @@ class SequenceSave(BaseModel):
 
 # --- APP SETUP ---
 app = FastAPI(title="Cinematic VFX Pipeline API")
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 # --- DATABASE ---
 MONGO_URL = "mongodb+srv://shaikmahammedfaruk_db_user:faruk%40123@cluster0.18nb4p7.mongodb.net/?retryWrites=true&w=majority"
@@ -59,55 +53,35 @@ async def get_sequence():
 
 @app.post("/api/render-trailer")
 async def render_trailer(data: SequenceSave):
-    sequence = data.sequence
-    if not sequence:
+    if not data.sequence:
         return {"status": "Error", "message": "Sequence is empty"}
+    # Dispatch task to background worker
+    task = render_trailer_task.delay(data.sequence)
+    return {"status": "Accepted", "task_id": task.id}
 
-    clips = []
-    temp_files = []
-    output_path = "/tmp/final_trailer.mp4"
-    try:
-        for asset in sequence:
-            # Download from Cloudinary URL to temporary /tmp folder
-            response = requests.get(asset["file_url"])
-            temp_path = f"/tmp/{ObjectId()}.mp4"
-            with open(temp_path, "wb") as f:
-                f.write(response.content)
-            
-            clips.append(VideoFileClip(temp_path))
-            temp_files.append(temp_path)
-        
-        final_clip = concatenate_videoclips(clips)
-        final_clip.write_videofile(output_path, codec="libx264", audio_codec="aac")
-        
-        final_clip.close()
-        for clip in clips: clip.close()
-            
-        # UPLOAD TO CLOUDINARY
-        upload_result = cloudinary.uploader.upload(output_path, resource_type="video", folder="final_trailers")
-        final_url = upload_result.get("secure_url")
-            
-        return {"status": "Success", "message": "Render completed successfully", "url": final_url}
-    except Exception as e:
-        return {"status": "Error", "message": str(e)}
-    finally:
-        # GUARANTEED Cleanup
-        for f in temp_files:
-            if os.path.exists(f): os.remove(f)
-        if os.path.exists(output_path):
-            os.remove(output_path)
+@app.get("/api/render-status/{task_id}")
+async def get_render_status(task_id: str):
+    task_result = AsyncResult(task_id)
+    return {"status": task_result.status, "result": task_result.result}
 
 @app.post("/api/upload-asset")
-async def upload_asset(title: str, tags: str, file: UploadFile = File(...)):
+async def upload_asset(
+    title: str = Form(...), 
+    tags: str = Form(...), 
+    lens_type: str = Form(...), 
+    frame_rate: str = Form(...), 
+    file: UploadFile = File(...)
+):
     upload_result = cloudinary.uploader.upload(file.file, resource_type="video", folder="vfx_pipeline")
     video_url = upload_result.get("secure_url")
     
     await assets_collection.insert_one({
         "asset_title": title,
         "file_url": video_url, 
-        "technical_tags": [tag.strip() for tag in tags.split(",")]
+        "technical_tags": [tag.strip() for tag in tags.split(",")],
+        "metadata": {"lens": lens_type, "fps": frame_rate}
     })
-    return {"status": "Success", "message": "Asset uploaded to cloud!"}
+    return {"status": "Success", "message": "Asset uploaded with technical metadata!"}
 
 @app.get("/api/assets")
 async def get_all_assets():
