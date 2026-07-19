@@ -58,9 +58,14 @@ def render_trailer_task(self, sequence):
         
         final_clip = concatenate_videoclips(clips, method="compose", padding=-fade_duration)
         
+        # --- PHASE 4: ADD CINEMATIC WATERMARK (FIXED ARGUMENTS) ---
         watermark = TextClip(
-            "ECHOES OF ETERNITY", font_size=50, color='white', 
-            font='Arial', method='caption', size=(final_clip.w, None)
+            text="ECHOES OF ETERNITY", 
+            font="Arial",
+            font_size=50, 
+            color="white", 
+            method="caption", 
+            size=(final_clip.w, None)
         ).with_duration(final_clip.duration).with_position(("center", "bottom"))
         
         final_clip = CompositeVideoClip([final_clip, watermark])
