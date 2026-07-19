@@ -10,10 +10,7 @@ from pydantic import BaseModel
 from worker import render_trailer_task, celery
 from celery.result import AsyncResult
 from datetime import datetime, timedelta
-from openai import OpenAI # Added OpenAI import
-
-# --- OPENAI SETUP ---
-client_openai = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+from gtts import gTTS # Use gTTS instead of OpenAI
 
 # --- CLOUDINARY SETUP ---
 cloudinary.config(
@@ -51,17 +48,13 @@ sequence_collection = database.get_collection("trailer_sequences")
 
 @app.post("/api/generate-voiceover")
 async def generate_voiceover(text: str = Form(...)):
-    """Generates an MP3 file from text using OpenAI TTS and uploads to Cloudinary."""
+    """Generates an MP3 file from text using free Google TTS and uploads to Cloudinary."""
     # Generate speech
-    response = client_openai.audio.speech.create(
-        model="tts-1",
-        voice="onyx",
-        input=text
-    )
+    tts = gTTS(text=text, lang='en', slow=False)
     
     # Save temporarily
     filename = f"vo_{ObjectId()}.mp3"
-    response.stream_to_file(filename)
+    tts.save(filename)
     
     # Upload to Cloudinary
     upload_result = cloudinary.uploader.upload(filename, resource_type="video")
