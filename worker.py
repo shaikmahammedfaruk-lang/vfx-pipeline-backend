@@ -26,8 +26,10 @@ celery_app = Celery('worker', broker=REDIS_URL, backend=REDIS_URL)
 TEMP_DIR = "temp_files"
 if not os.path.exists(TEMP_DIR): os.makedirs(TEMP_DIR)
 
-@celery_app.task(bind=True)
+# Change this in worker.py:
+@celery_app.task(name="render_trailer_task", bind=True)
 def render_trailer_task(self, sequence, audio_url=None):
+    # ... rest of your code ...
     clips = []
     temp_files = []
     unique_id = f"{ObjectId()}_{int(time.time())}"
