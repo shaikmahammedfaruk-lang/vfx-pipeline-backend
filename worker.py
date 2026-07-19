@@ -8,17 +8,14 @@ import cloudinary
 import cloudinary.uploader
 from bson import ObjectId
 
-# Load environment variables
 load_dotenv()
 
-# --- CLOUDINARY SETUP ---
 cloudinary.config(
     cloud_name=os.getenv("CLOUDINARY_CLOUD_NAME"),
     api_key=os.getenv("CLOUDINARY_API_KEY"),
     api_secret=os.getenv("CLOUDINARY_API_SECRET")
 )
 
-# --- CELERY SETUP ---
 REDIS_URL = "rediss://default:gQAAAAAAAohWAAIgcDE2MDIxMzc3ZmI3YzQ0NDAzOGIzN2MxMzkyOTM0ZDc1OQ@sunny-snail-165974.upstash.io:6379?ssl_cert_reqs=CERT_NONE"
 celery = Celery('tasks', broker=REDIS_URL, backend=REDIS_URL)
 
@@ -42,9 +39,12 @@ def render_trailer_task(self, sequence):
             
             clip = VideoFileClip(temp_path)
             
-            # --- PHASE 4: APPLY CINEMATIC VFX ---
-            # Using lum_contrast (common in v2.0+) to safely boost visual quality
-            clip = clip.with_effects([clip.lum_contrast(contrast=1.2)])
+            # --- PHASE 4: STABLE VFX APPLICATION ---
+            try:
+                from moviepy.video.fx import colorx
+                clip = colorx(clip, 1.2)
+            except:
+                pass
             
             if hasattr(clip, "fadein"): clip = clip.fadein(fade_duration)
             clips.append(clip)
@@ -55,12 +55,9 @@ def render_trailer_task(self, sequence):
         
         final_clip = concatenate_videoclips(clips, method="compose", padding=-fade_duration)
         
-        # --- PHASE 4: ADD CINEMATIC WATERMARK ---
         watermark = TextClip(
-            "ECHOES OF ETERNITY", 
-            font_size=50, color='white', 
-            font='Arial', method='caption', 
-            size=(final_clip.w, None)
+            "ECHOES OF ETERNITY", font_size=50, color='white', 
+            font='Arial', method='caption', size=(final_clip.w, None)
         ).with_duration(final_clip.duration).with_position(("center", "bottom"))
         
         final_clip = CompositeVideoClip([final_clip, watermark])
@@ -71,10 +68,8 @@ def render_trailer_task(self, sequence):
             
         upload_result = cloudinary.uploader.upload(output_path, resource_type="video", folder="final_trailers")
         return {"status": "Success", "url": upload_result.get("secure_url")}
-        
     except Exception as e:
         return {"status": "Error", "message": str(e)}
-        
     finally:
         for f in temp_files:
             if os.path.exists(f): os.remove(f)
