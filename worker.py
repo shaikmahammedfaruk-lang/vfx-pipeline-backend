@@ -20,13 +20,13 @@ cloudinary.config(
 
 # --- CELERY SETUP ---
 REDIS_URL = "rediss://default:gQAAAAAAAohWAAIgcDE2MDIxMzc3ZmI3YzQ0NDAzOGIzN2MxMzkyOTM0ZDc1OQ@sunny-snail-165974.upstash.io:6379?ssl_cert_reqs=CERT_NONE"
-# Renamed from 'celery' to 'celery_app' to prevent naming conflicts
-celery_app = Celery('tasks', broker=REDIS_URL, backend=REDIS_URL)
+# Using a unique name for the app instance to avoid namespace collisions
+celery_app = Celery('worker', broker=REDIS_URL, backend=REDIS_URL)
 
 TEMP_DIR = "temp_files"
 if not os.path.exists(TEMP_DIR): os.makedirs(TEMP_DIR)
 
-@celery_app.task(name="render_trailer_task", bind=True)
+@celery_app.task(bind=True)
 def render_trailer_task(self, sequence, audio_url=None):
     clips = []
     temp_files = []
@@ -43,7 +43,7 @@ def render_trailer_task(self, sequence, audio_url=None):
             
             clip = VideoFileClip(temp_path)
             
-            # --- VFX APPLICATION ---
+            # VFX APPLICATION
             try:
                 from moviepy.video.fx import colorx
                 clip = clip.with_effects([colorx(1.2)])
@@ -57,10 +57,10 @@ def render_trailer_task(self, sequence, audio_url=None):
             progress = int(((i + 1) / total_assets) * 100)
             self.update_state(state='PROGRESS', meta={'percent': progress})
         
-        # Concatenate with cross-fade effect
+        # Concatenate
         final_clip = concatenate_videoclips(clips, method="compose", padding=-fade_duration)
         
-        # --- AUDIO INTEGRATION ---
+        # AUDIO INTEGRATION
         if audio_url:
             audio_path = os.path.join(TEMP_DIR, f"audio_{unique_id}.mp3")
             audio_response = requests.get(audio_url)
@@ -68,30 +68,29 @@ def render_trailer_task(self, sequence, audio_url=None):
             temp_files.append(audio_path)
             
             background_audio = AudioFileClip(audio_path)
-            
-            # Ensure audio length matches video
             if background_audio.duration > final_clip.duration:
                 background_audio = background_audio.subclipped(0, final_clip.duration)
             
             final_clip = final_clip.with_audio(background_audio)
         
-        # --- WATERMARK ---
+        # WATERMARK (Using explicit duration and size for stability)
         watermark = TextClip(
             text="ECHOES OF ETERNITY", 
             font_size=50, 
             color="white", 
-            method="caption", 
-            size=(final_clip.w, None)
+            size=(final_clip.w, 100)
         ).with_duration(final_clip.duration).with_position(("center", "bottom"))
         
         final_clip = CompositeVideoClip([final_clip, watermark])
         final_clip.write_videofile(output_path, codec="libx264", audio_codec="aac")
         
+        # Upload
+        upload_result = cloudinary.uploader.upload(output_path, resource_type="video", folder="final_trailers")
+        
         # Cleanup
         final_clip.close()
         for clip in clips: clip.close()
-            
-        upload_result = cloudinary.uploader.upload(output_path, resource_type="video", folder="final_trailers")
+        
         return {"status": "Success", "url": upload_result.get("secure_url")}
         
     except Exception as e:
@@ -101,9 +100,6 @@ def render_trailer_task(self, sequence, audio_url=None):
         for clip in clips:
             try: clip.close()
             except: pass
-            
-        time.sleep(1) # Allow OS to release file locks
-        
         for f in temp_files:
             try:
                 if os.path.exists(f): os.remove(f)
