@@ -32,3 +32,4 @@ celery
 redis
 cloudinary
 requests
+openai
