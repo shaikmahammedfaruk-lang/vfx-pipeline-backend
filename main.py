@@ -7,10 +7,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 from bson import ObjectId
 from pydantic import BaseModel
-from worker import render_trailer_task, celery
+# Import the renamed celery_app from worker
+from worker import render_trailer_task, celery_app
 from celery.result import AsyncResult
 from datetime import datetime, timedelta
-from gtts import gTTS # Use gTTS instead of OpenAI
+from gtts import gTTS
 
 # --- CLOUDINARY SETUP ---
 cloudinary.config(
@@ -26,7 +27,7 @@ class UpdateAsset(BaseModel):
 
 class SequenceSave(BaseModel):
     sequence: list
-    audio_url: str = None  # Added audio_url field
+    audio_url: str = None
 
 # --- APP SETUP ---
 app = FastAPI(title="Cinematic VFX Pipeline API")
@@ -48,18 +49,11 @@ sequence_collection = database.get_collection("trailer_sequences")
 
 @app.post("/api/generate-voiceover")
 async def generate_voiceover(text: str = Form(...)):
-    """Generates an MP3 file from text using free Google TTS and uploads to Cloudinary."""
-    # Generate speech
     tts = gTTS(text=text, lang='en', slow=False)
-    
-    # Save temporarily
     filename = f"vo_{ObjectId()}.mp3"
     tts.save(filename)
-    
-    # Upload to Cloudinary
     upload_result = cloudinary.uploader.upload(filename, resource_type="video")
-    os.remove(filename) # Cleanup local file
-    
+    os.remove(filename)
     return {"audio_url": upload_result.get("secure_url")}
 
 @app.get("/api/system-status")
@@ -90,14 +84,13 @@ async def get_sequence():
 async def render_trailer(data: SequenceSave):
     if not data.sequence:
         return {"status": "Error", "message": "Sequence is empty"}
-    
-    # Passing sequence and audio_url to the worker
     task = render_trailer_task.delay(data.sequence, audio_url=data.audio_url)
     return {"status": "Accepted", "task_id": task.id}
 
 @app.get("/api/render-status/{task_id}")
 async def get_render_status(task_id: str):
-    task_result = AsyncResult(task_id, app=celery)
+    # Use celery_app instance here
+    task_result = AsyncResult(task_id, app=celery_app)
     response = {"status": task_result.status, "progress": 0, "result": None}
     
     if task_result.state == 'PROGRESS':
@@ -106,20 +99,16 @@ async def get_render_status(task_id: str):
     if task_result.ready():
         response["progress"] = 100
         response["result"] = task_result.result
-        
     return response
 
 @app.post("/api/upload-asset")
 async def upload_asset(
-    title: str = Form(...), 
-    tags: str = Form(...), 
-    lens_type: str = Form(...), 
-    frame_rate: str = Form(...), 
+    title: str = Form(...), tags: str = Form(...), 
+    lens_type: str = Form(...), frame_rate: str = Form(...), 
     file: UploadFile = File(...)
 ):
     upload_result = cloudinary.uploader.upload(file.file, resource_type="video", folder="vfx_pipeline")
     video_url = upload_result.get("secure_url")
-    
     await assets_collection.insert_one({
         "asset_title": title,
         "file_url": video_url, 

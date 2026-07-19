@@ -20,12 +20,13 @@ cloudinary.config(
 
 # --- CELERY SETUP ---
 REDIS_URL = "rediss://default:gQAAAAAAAohWAAIgcDE2MDIxMzc3ZmI3YzQ0NDAzOGIzN2MxMzkyOTM0ZDc1OQ@sunny-snail-165974.upstash.io:6379?ssl_cert_reqs=CERT_NONE"
-celery = Celery('tasks', broker=REDIS_URL, backend=REDIS_URL)
+# Renamed from 'celery' to 'celery_app' to prevent naming conflicts
+celery_app = Celery('tasks', broker=REDIS_URL, backend=REDIS_URL)
 
 TEMP_DIR = "temp_files"
 if not os.path.exists(TEMP_DIR): os.makedirs(TEMP_DIR)
 
-@celery.task(name="render_trailer_task", bind=True)
+@celery_app.task(name="render_trailer_task", bind=True)
 def render_trailer_task(self, sequence, audio_url=None):
     clips = []
     temp_files = []
@@ -68,7 +69,7 @@ def render_trailer_task(self, sequence, audio_url=None):
             
             background_audio = AudioFileClip(audio_path)
             
-            # Logic: If audio is longer, trim to video duration; if shorter, video will end at audio end
+            # Ensure audio length matches video
             if background_audio.duration > final_clip.duration:
                 background_audio = background_audio.subclipped(0, final_clip.duration)
             
