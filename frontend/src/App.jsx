@@ -12,6 +12,7 @@ function App() {
   const [loading, setLoading] = useState(false)
   const [sequence, setSequence] = useState([])
   const [systemStatus, setSystemStatus] = useState({ mongodb: 'Checking...', api: 'Checking...' })
+  const [finalTrailerUrl, setFinalTrailerUrl] = useState('')
 
   const fetchData = async () => {
     try {
@@ -46,7 +47,8 @@ function App() {
       return;
     }
     
-    setMessage("Rendering in progress... please wait, this may take a few minutes.");
+    setMessage("Rendering in progress... please wait.");
+    setFinalTrailerUrl('');
     
     try {
       const response = await fetch(`${API_BASE_URL}/api/render-trailer`, { 
@@ -58,12 +60,13 @@ function App() {
       const data = await response.json();
       
       if(data.status === 'Success') {
-        setMessage("Render Complete! Your trailer is ready.");
+        setMessage("Render Complete!");
+        setFinalTrailerUrl(data.url); // Save the Cloudinary URL
       } else {
         setMessage(`Render failed: ${data.message}`);
       }
     } catch (err) { 
-      setMessage("Render taking longer than expected. Check the backend logs to confirm completion."); 
+      setMessage("Render taking longer than expected. Check backend logs."); 
     }
   };
 
@@ -115,6 +118,15 @@ function App() {
         <h3>SYSTEM STATUS</h3>
         <p>🚀 FastAPI: {systemStatus.api} | 🗄️ MongoDB: {systemStatus.mongodb}</p>
         <button onClick={renderTrailer}>🚀 Render Final Trailer</button>
+        
+        {finalTrailerUrl && (
+          <div className="final-output">
+            <h4>Final Trailer Ready:</h4>
+            <video src={finalTrailerUrl} controls width="100%" />
+            <a href={finalTrailerUrl} target="_blank" rel="noreferrer">Download Full Trailer</a>
+          </div>
+        )}
+
         <div className="sequence-grid">
           {sequence.map((asset, index) => (
             <div key={index} className="sequence-item">
