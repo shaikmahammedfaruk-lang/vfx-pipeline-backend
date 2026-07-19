@@ -58,10 +58,10 @@ def render_trailer_task(self, sequence):
         
         final_clip = concatenate_videoclips(clips, method="compose", padding=-fade_duration)
         
-        # --- PHASE 4: ADD CINEMATIC WATERMARK (FIXED ARGUMENTS) ---
+        # --- PHASE 4: ADD CINEMATIC WATERMARK (FIXED FONT) ---
         watermark = TextClip(
             text="ECHOES OF ETERNITY", 
-            font="Arial",
+            font="sans-serif", # Changed from "Arial" to generic fallback
             font_size=50, 
             color="white", 
             method="caption", 
@@ -82,7 +82,7 @@ def render_trailer_task(self, sequence):
         return {"status": "Error", "message": str(e)}
         
     finally:
-        # Robust Cleanup Logic to avoid PermissionError
+        # Robust Cleanup Logic
         for clip in clips:
             try: clip.close()
             except: pass
