@@ -27,7 +27,7 @@ TEMP_DIR = "temp_files"
 if not os.path.exists(TEMP_DIR): os.makedirs(TEMP_DIR)
 
 # Change this in worker.py:
-@celery_app.task(name="render_trailer_task")
+@celery_app.task(name="render_trailer_task",bind=True)
 def render_trailer_task(self, sequence, audio_url=None):
     # ... rest of your code ...
     clips = []
