@@ -2,12 +2,12 @@ import os
 import requests
 from celery import Celery
 from moviepy import VideoFileClip, concatenate_videoclips
+from moviepy.video.fx import FadeIn
 import cloudinary
 import cloudinary.uploader
 from bson import ObjectId
 
 # --- CLOUDINARY SETUP ---
-# Ensure these environment variables are set in your environment
 cloudinary.config(
     cloud_name=os.getenv("CLOUDINARY_CLOUD_NAME"),
     api_key=os.getenv("CLOUDINARY_API_KEY"),
@@ -32,7 +32,6 @@ if not os.path.exists(TEMP_DIR):
 def render_trailer_task(sequence):
     clips = []
     temp_files = []
-    # Create a unique output path using the local directory
     output_path = os.path.join(TEMP_DIR, f"final_{ObjectId()}.mp4")
     fade_duration = 0.5
     
@@ -44,9 +43,9 @@ def render_trailer_task(sequence):
             with open(temp_path, "wb") as f:
                 f.write(response.content)
             
-            # Process with moviepy
+            # Process with moviepy using the new FadeIn effect
             clip = VideoFileClip(temp_path)
-            clip = clip.crossfadein(fade_duration)
+            clip = FadeIn(clip, duration=fade_duration)
             clips.append(clip)
             temp_files.append(temp_path)
         
