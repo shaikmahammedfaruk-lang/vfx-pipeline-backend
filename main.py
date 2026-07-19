@@ -1,15 +1,21 @@
+import os
+import requests
+import cloudinary
+import cloudinary.uploader
 from moviepy import VideoFileClip, concatenate_videoclips
 from fastapi import FastAPI, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 from motor.motor_asyncio import AsyncIOMotorClient
 from bson import ObjectId
 from pydantic import BaseModel
-import shutil
-import os
-import cv2
-import numpy as np
 import certifi
+
+# --- CLOUDINARY SETUP ---
+cloudinary.config(
+    cloud_name=os.getenv("CLOUDINARY_CLOUD_NAME"),
+    api_key=os.getenv("CLOUDINARY_API_KEY"),
+    api_secret=os.getenv("CLOUDINARY_API_SECRET")
+)
 
 # --- MODELS ---
 class UpdateAsset(BaseModel):
@@ -21,12 +27,6 @@ class SequenceSave(BaseModel):
 
 # --- APP SETUP ---
 app = FastAPI(title="Cinematic VFX Pipeline API")
-
-MEDIA_DIR = "./media"
-if not os.path.exists(MEDIA_DIR):
-    os.makedirs(MEDIA_DIR)
-
-app.mount("/media", StaticFiles(directory=MEDIA_DIR), name="media")
 
 app.add_middleware(
     CORSMiddleware,
@@ -42,12 +42,11 @@ database = client.vfx_studio_db
 assets_collection = database.get_collection("vfx_assets")
 sequence_collection = database.get_collection("trailer_sequences")
 
-# --- SYSTEM TELEMETRY ---
+# --- ENDPOINTS ---
 @app.get("/api/system-status")
 async def get_system_status():
     return {"mongodb": "Connected", "api": "Online"}
 
-# --- SEQUENCE PERSISTENCE ---
 @app.post("/api/sequence/save")
 async def save_sequence(data: SequenceSave):
     await sequence_collection.replace_one({"id": "main"}, {"data": data.sequence}, upsert=True)
@@ -58,7 +57,6 @@ async def get_sequence():
     doc = await sequence_collection.find_one({"id": "main"})
     return {"sequence": doc["data"] if doc else []}
 
-# --- RENDER ENGINE ---
 @app.post("/api/render-trailer")
 async def render_trailer(data: SequenceSave):
     sequence = data.sequence
@@ -66,49 +64,42 @@ async def render_trailer(data: SequenceSave):
         return {"status": "Error", "message": "Sequence is empty"}
 
     clips = []
+    temp_files = []
     try:
-        # Load clips from local paths
         for asset in sequence:
-            file_path = os.path.join(MEDIA_DIR, asset["file_name"])
-            if os.path.exists(file_path):
-                clips.append(VideoFileClip(file_path))
+            # Download from Cloudinary URL to temporary /tmp folder
+            response = requests.get(asset["file_url"])
+            temp_path = f"/tmp/{asset['asset_title']}.mp4"
+            with open(temp_path, "wb") as f:
+                f.write(response.content)
+            clips.append(VideoFileClip(temp_path))
+            temp_files.append(temp_path)
         
-        if not clips:
-            return {"status": "Error", "message": "No valid video files found on server"}
-
         final_clip = concatenate_videoclips(clips)
-        output_path = os.path.join(MEDIA_DIR, "final_trailer.mp4")
-        
+        output_path = f"/tmp/final_trailer.mp4"
         final_clip.write_videofile(output_path, codec="libx264", audio_codec="aac")
         
-        # Cleanup
         final_clip.close()
         for clip in clips: clip.close()
         
-        return {"status": "Success", "url": "/media/final_trailer.mp4"}
+        # In a production app, you would upload this final file back to Cloudinary
+        return {"status": "Success", "message": "Rendered to temporary server storage"}
     except Exception as e:
         return {"status": "Error", "message": str(e)}
 
-# --- ASSET MANAGEMENT ---
 @app.post("/api/upload-asset")
 async def upload_asset(title: str, tags: str, file: UploadFile = File(...)):
-    file_path = os.path.join(MEDIA_DIR, file.filename)
-    with open(file_path, "wb") as disk_file:
-        shutil.copyfileobj(file.file, disk_file)
+    # Upload to Cloudinary
+    upload_result = cloudinary.uploader.upload(file.file, resource_type="video", folder="vfx_pipeline")
+    video_url = upload_result.get("secure_url")
     
-    auto_tags = [tag.strip() for tag in tags.split(",")]
-    thumbnail_name = f"thumb_{file.filename}.jpg"
-    
-    if file.content_type.startswith("video/"):
-        clip = VideoFileClip(file_path)
-        clip.save_frame(os.path.join(MEDIA_DIR, thumbnail_name), t=0.0)
-        clip.close()
-
-    db_entry = await assets_collection.insert_one({
-        "asset_title": title, "file_name": file.filename,
-        "thumbnail_file": thumbnail_name, "technical_tags": auto_tags
+    # Save URL to MongoDB
+    await assets_collection.insert_one({
+        "asset_title": title,
+        "file_url": video_url, 
+        "technical_tags": [tag.strip() for tag in tags.split(",")]
     })
-    return {"status": "Success", "message": "Asset processed!"}
+    return {"status": "Success", "message": "Asset uploaded to cloud!"}
 
 @app.get("/api/assets")
 async def get_all_assets():
@@ -123,7 +114,6 @@ async def delete_asset(asset_id: str):
 
 @app.put("/api/assets/{asset_id}")
 async def update_asset(asset_id: str, asset_data: UpdateAsset):
-    # Split tags by comma to update as a list
     tags_list = [t.strip() for t in asset_data.tags.split(",")]
     await assets_collection.update_one(
         {"_id": ObjectId(asset_id)}, 

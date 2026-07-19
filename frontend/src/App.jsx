@@ -9,8 +9,6 @@ function App() {
   const [file, setFile] = useState(null)
   const [message, setMessage] = useState('')
   const [vaultAssets, setVaultAssets] = useState([])
-  const [searchTerm, setSearchTerm] = useState('') 
-  const [activeFilters, setActiveFilters] = useState([])
   const [loading, setLoading] = useState(false)
   const [sequence, setSequence] = useState([])
   const [systemStatus, setSystemStatus] = useState({ mongodb: 'Checking...', api: 'Checking...' })
@@ -37,18 +35,8 @@ function App() {
 
   useEffect(() => { fetchData() }, [])
 
-  // --- CRUD OPERATIONS ---
   const deleteAsset = async (id) => {
     await fetch(`${API_BASE_URL}/api/assets/${id}`, { method: 'DELETE' });
-    fetchData();
-  };
-
-  const updateAsset = async (id, newTitle, newTags) => {
-    await fetch(`${API_BASE_URL}/api/assets/${id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ title: newTitle, tags: newTags })
-    });
     fetchData();
   };
 
@@ -65,48 +53,27 @@ function App() {
         body: JSON.stringify({ sequence }) 
       });
       const data = await response.json();
-      if(data.status === 'Success') setMessage(`Render Complete! View: ${API_BASE_URL}${data.url}`);
+      if(data.status === 'Success') setMessage(`Render Complete!`);
       else setMessage(`Render failed: ${data.message}`);
     } catch (err) { setMessage("Render failed."); }
   };
 
-  // --- UI HELPERS ---
-  const uniqueTags = [...new Set(vaultAssets.flatMap(a => a.technical_tags || []))];
-  const toggleFilter = (tag) => setActiveFilters(prev => prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]);
   const addToSequence = (asset) => setSequence([...sequence, asset]);
   const removeFromSequence = (index) => setSequence(sequence.filter((_, i) => i !== index));
-  const moveInSequence = (index, direction) => {
-    const newSequence = [...sequence];
-    const targetIndex = index + direction;
-    if (targetIndex >= 0 && targetIndex < newSequence.length) {
-      [newSequence[index], newSequence[targetIndex]] = [newSequence[targetIndex], newSequence[index]];
-      setSequence(newSequence);
-    }
-  };
 
   const handleUpload = async (e) => {
     e.preventDefault()
     if (!file) return;
-    setLoading(true); setMessage("Processing...");
+    setLoading(true); setMessage("Uploading to Cloud...");
     const formData = new FormData(); formData.append('file', file);
     try {
       await fetch(`${API_BASE_URL}/api/upload-asset?title=${encodeURIComponent(title)}&tags=${encodeURIComponent(tags)}`, {
         method: 'POST', body: formData
       });
       setTitle(''); setTags(''); setFile(null); fetchData();
-      setMessage("Asset uploaded!");
+      setMessage("Asset uploaded to Cloud!");
     } catch (error) { setMessage('Upload failed.') } finally { setLoading(false) }
   }
-
-  const filteredAssets = vaultAssets.filter(asset => {
-    const searchLower = searchTerm.toLowerCase();
-    const titleMatch = (asset.asset_title || "").toLowerCase().includes(searchLower);
-    const tagMatch = (asset.technical_tags || []).some(tag => tag.toLowerCase().includes(searchLower));
-    const filterMatch = activeFilters.length === 0 || activeFilters.every(f => asset.technical_tags?.includes(f));
-    return (titleMatch || tagMatch) && filterMatch;
-  });
-
-  const isVideo = (filename) => filename && filename.toLowerCase().match(/\.(mp4|webm|mov|ogg)$/);
 
   return (
     <div className="dashboard-layout">
@@ -124,9 +91,10 @@ function App() {
       <div className="vault-section">
         <h2>ASSET VAULT OVERVIEW</h2>
         <div className="asset-grid">
-          {filteredAssets.map((asset) => (
+          {vaultAssets.map((asset) => (
             <div key={asset._id} className="asset-card">
-              {isVideo(asset.file_name) ? <video src={`${API_BASE_URL}/media/${asset.file_name}`} controls className="asset-thumbnail" /> : <img src={`${API_BASE_URL}/media/${asset.file_name}`} className="asset-thumbnail" />}
+              {/* USE THE CLOUDINARY URL FROM MONGODB */}
+              <video src={asset.file_url} controls className="asset-thumbnail" />
               <div className="asset-title">{asset.asset_title}</div>
               <button onClick={() => addToSequence(asset)}>+ Add</button>
               <button onClick={() => deleteAsset(asset._id)} style={{ background: '#ef4444' }}>Delete</button>
@@ -142,7 +110,7 @@ function App() {
         <div className="sequence-grid">
           {sequence.map((asset, index) => (
             <div key={index} className="sequence-item">
-              <img src={`${API_BASE_URL}/media/${asset.thumbnail_file}`} />
+              <img src={asset.file_url} style={{ height: '50px' }} />
               <button onClick={() => removeFromSequence(index)}>X</button>
             </div>
           ))}
