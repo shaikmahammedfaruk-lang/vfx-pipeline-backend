@@ -45,7 +45,7 @@ function App() {
       setMessage("Sequence is empty. Add assets first!");
       return;
     }
-    setMessage("Rendering...");
+    setMessage("Rendering... (Check logs)");
     try {
       const response = await fetch(`${API_BASE_URL}/api/render-trailer`, { 
         method: 'POST',
@@ -71,7 +71,7 @@ function App() {
         method: 'POST', body: formData
       });
       setTitle(''); setTags(''); setFile(null); fetchData();
-      setMessage("Asset uploaded to Cloud!");
+      setMessage("Asset uploaded!");
     } catch (error) { setMessage('Upload failed.') } finally { setLoading(false) }
   }
 
@@ -93,7 +93,7 @@ function App() {
         <div className="asset-grid">
           {vaultAssets.map((asset) => (
             <div key={asset._id} className="asset-card">
-              {/* USE THE CLOUDINARY URL FROM MONGODB */}
+              {/* FIXED: Using file_url from Cloudinary */}
               <video src={asset.file_url} controls className="asset-thumbnail" />
               <div className="asset-title">{asset.asset_title}</div>
               <button onClick={() => addToSequence(asset)}>+ Add</button>
@@ -110,7 +110,7 @@ function App() {
         <div className="sequence-grid">
           {sequence.map((asset, index) => (
             <div key={index} className="sequence-item">
-              <img src={asset.file_url} style={{ height: '50px' }} />
+              <video src={asset.file_url} style={{ height: '50px', width: '80px' }} />
               <button onClick={() => removeFromSequence(index)}>X</button>
             </div>
           ))}

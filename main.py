@@ -67,40 +67,35 @@ async def render_trailer(data: SequenceSave):
     temp_files = []
     try:
         for asset in sequence:
-            # Download from Cloudinary URL to temporary /tmp folder
             response = requests.get(asset["file_url"])
             temp_path = f"/tmp/{ObjectId()}.mp4"
             with open(temp_path, "wb") as f:
                 f.write(response.content)
-            
             clips.append(VideoFileClip(temp_path))
             temp_files.append(temp_path)
         
         final_clip = concatenate_videoclips(clips)
-        output_path = f"/tmp/final_trailer.mp4"
+        output_path = "/tmp/final_trailer.mp4"
         final_clip.write_videofile(output_path, codec="libx264", audio_codec="aac")
         
         final_clip.close()
         for clip in clips: clip.close()
-        
-        # Cleanup temporary files
-        for f in temp_files:
-            if os.path.exists(f): os.remove(f)
             
         return {"status": "Success", "message": "Render completed successfully"}
     except Exception as e:
-        # Cleanup on error
+        return {"status": "Error", "message": str(e)}
+    finally:
+        # GUARANTEED Cleanup: runs even if the render crashes
         for f in temp_files:
             if os.path.exists(f): os.remove(f)
-        return {"status": "Error", "message": str(e)}
+        if os.path.exists("/tmp/final_trailer.mp4"):
+            os.remove("/tmp/final_trailer.mp4")
 
 @app.post("/api/upload-asset")
 async def upload_asset(title: str, tags: str, file: UploadFile = File(...)):
-    # Upload to Cloudinary
     upload_result = cloudinary.uploader.upload(file.file, resource_type="video", folder="vfx_pipeline")
     video_url = upload_result.get("secure_url")
     
-    # Save URL to MongoDB
     await assets_collection.insert_one({
         "asset_title": title,
         "file_url": video_url, 
