@@ -43,9 +43,9 @@ def render_trailer_task(sequence):
             with open(temp_path, "wb") as f:
                 f.write(response.content)
             
-            # Process with moviepy using the new FadeIn effect
+            # Process with moviepy using the compatible with_effects pattern
             clip = VideoFileClip(temp_path)
-            clip = FadeIn(clip, duration=fade_duration)
+            clip = clip.with_effects(FadeIn, duration=fade_duration)
             clips.append(clip)
             temp_files.append(temp_path)
         
