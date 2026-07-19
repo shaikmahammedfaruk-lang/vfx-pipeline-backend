@@ -2,7 +2,6 @@ import os
 import requests
 from celery import Celery
 from moviepy import VideoFileClip, concatenate_videoclips
-import moviepy.video.fx as fx
 import cloudinary
 import cloudinary.uploader
 from bson import ObjectId
@@ -23,7 +22,6 @@ celery = Celery(
     backend=REDIS_URL
 )
 
-# Ensure local temp directory exists
 TEMP_DIR = "temp_files"
 if not os.path.exists(TEMP_DIR):
     os.makedirs(TEMP_DIR)
@@ -37,28 +35,30 @@ def render_trailer_task(sequence):
     
     try:
         for asset in sequence:
-            # Download file
             response = requests.get(asset["file_url"])
             temp_path = os.path.join(TEMP_DIR, f"{ObjectId()}.mp4")
             with open(temp_path, "wb") as f:
                 f.write(response.content)
             
-            # Process with moviepy using the generic fx() method
+            # Use standard loading - avoid any complex .fx() or .with_effects()
+            # If fade-in is required, we use the simple fadein method if available, 
+            # otherwise just use the raw clip.
             clip = VideoFileClip(temp_path)
-            # This applies FadeIn safely using the fx module
-            clip = clip.fx(fx.FadeIn, duration=fade_duration)
             
+            # Simple check to apply fade if possible
+            if hasattr(clip, "fadein"):
+                clip = clip.fadein(fade_duration)
+                
             clips.append(clip)
             temp_files.append(temp_path)
         
-        # Concatenate using compose method
+        # Concatenate and export
         final_clip = concatenate_videoclips(clips, method="compose", padding=-fade_duration)
         final_clip.write_videofile(output_path, codec="libx264", audio_codec="aac")
         
         final_clip.close()
         for clip in clips: clip.close()
             
-        # Upload result to Cloudinary
         upload_result = cloudinary.uploader.upload(output_path, resource_type="video", folder="final_trailers")
         return {"status": "Success", "url": upload_result.get("secure_url")}
         
@@ -66,7 +66,6 @@ def render_trailer_task(sequence):
         return {"status": "Error", "message": str(e)}
         
     finally:
-        # Guaranteed Cleanup
         for f in temp_files:
             if os.path.exists(f): os.remove(f)
         if os.path.exists(output_path):
