@@ -4,6 +4,7 @@ import requests
 from dotenv import load_dotenv
 from celery import Celery
 from moviepy import VideoFileClip, concatenate_videoclips, TextClip, CompositeVideoClip, AudioFileClip
+from moviepy.video.fx import FadeIn
 import cloudinary
 import cloudinary.uploader
 from bson import ObjectId
@@ -43,8 +44,8 @@ def render_trailer_task(self, sequence, audio_url=None):
             clip = VideoFileClip(temp_path)
             
             # --- VFX APPLICATION (Serialization Safe) ---
-            # Apply fadein directly to the clip object
-            clip = clip.fadein(fade_duration)
+            # Applying fadein using the explicit effect class
+            clip = clip.with_effects([FadeIn(fade_duration)])
             
             clips.append(clip)
             temp_files.append(temp_path)
@@ -68,7 +69,7 @@ def render_trailer_task(self, sequence, audio_url=None):
             
             final_clip = final_clip.with_audio(background_audio)
         
-        # WATERMARK (Direct method to avoid 'copy' error)
+        # WATERMARK
         watermark = TextClip(
             text="ECHOES OF ETERNITY", 
             font_size=50, 
