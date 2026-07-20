@@ -20,16 +20,13 @@ cloudinary.config(
 
 # --- CELERY SETUP ---
 REDIS_URL = "rediss://default:gQAAAAAAAohWAAIgcDE2MDIxMzc3ZmI3YzQ0NDAzOGIzN2MxMzkyOTM0ZDc1OQ@sunny-snail-165974.upstash.io:6379?ssl_cert_reqs=CERT_NONE"
-# Using a unique name for the app instance to avoid namespace collisions
 celery_app = Celery('worker', broker=REDIS_URL, backend=REDIS_URL)
 
 TEMP_DIR = "temp_files"
 if not os.path.exists(TEMP_DIR): os.makedirs(TEMP_DIR)
 
-# Change this in worker.py:
-@celery_app.task(name="render_trailer_task",bind=True)
+@celery_app.task(name="render_trailer_task", bind=True)
 def render_trailer_task(self, sequence, audio_url=None):
-    # ... rest of your code ...
     clips = []
     temp_files = []
     unique_id = f"{ObjectId()}_{int(time.time())}"
@@ -45,14 +42,10 @@ def render_trailer_task(self, sequence, audio_url=None):
             
             clip = VideoFileClip(temp_path)
             
-            # VFX APPLICATION
-            try:
-                from moviepy.video.fx import colorx
-                clip = clip.with_effects([colorx(1.2)])
-            except: pass
+            # --- VFX APPLICATION (Serialization Safe) ---
+            # Apply fadein directly to the clip object
+            clip = clip.fadein(fade_duration)
             
-            # Fade in transition
-            clip = clip.with_effects([lambda c: c.fadein(fade_duration)])
             clips.append(clip)
             temp_files.append(temp_path)
             
@@ -75,9 +68,7 @@ def render_trailer_task(self, sequence, audio_url=None):
             
             final_clip = final_clip.with_audio(background_audio)
         
-        # WATERMARK (Using explicit duration and size for stability)
-   # --- WATERMARK ---
-        # Using a fixed size and ensuring we don't pass complex objects
+        # WATERMARK (Direct method to avoid 'copy' error)
         watermark = TextClip(
             text="ECHOES OF ETERNITY", 
             font_size=50, 
